@@ -1,0 +1,39 @@
+#!/bin/bash
+
+set -e
+
+sudo sysctl -w vm.max_map_count=262144
+
+stoppingContainers () {
+	echo "Stopping containers"
+	docker-compose down
+}
+
+if (( $# != 1 )); then
+    echo "Illegal number of parameters"
+    echo "usage: services [create|start|stop]"
+    exit 1
+fi
+
+command="$1"
+case "${command}" in
+	"help")
+        echo "usage: services [create|start|stop]"
+        ;;
+        "start")
+		stoppingContainers
+		docker-compose up -d
+		;;
+	"stop")
+		stoppingContainers
+		;;
+	"create")
+		echo "Pulling Docker images"
+		docker-compose pull
+		;;
+	*)
+		echo "Command not Found."
+		echo "usage: services [create|start|stop]"
+		exit 127;
+		;;
+esac

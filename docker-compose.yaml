@@ -1,0 +1,145 @@
+version: "3.7"
+
+services:
+  iot-agent:
+    image: fiware/iotagent-ul:1.15.0
+    hostname: iot-agent
+    container_name: "iot-agent"
+    depends_on:
+      - mongo-db
+    networks:
+      - fiware
+    expose:
+      - "4041"
+    ports:
+      - "4062:4061"
+    environment:
+      - IOTA_CB_HOST=orion
+      - IOTA_CB_PORT=1026
+      - IOTA_NORTH_PORT=4061
+      - IOTA_REGISTRY_TYPE=mongodb
+      - IOTA_LOG_LEVEL=DEBUG
+      - IOTA_TIMESTAMP=true
+      - IOTA_CB_NGSI_VERSION=v2
+      - IOTA_AUTOCAST=true
+      - IOTA_MONGO_HOST=mongo-db
+      - IOTA_MONGO_PORT=27017
+      - IOTA_MONGO_DB=iotagentul
+      - IOTA_PROVIDER_URL=http://iot-agent:4062
+      - IOTA_MQTT_HOST=mosquitto
+      - IOTA_MQTT_PORT=1883
+  mqtt-broker:
+     image: "eclipse-mosquitto"
+     restart: "always"
+     hostname: mosquitto
+     container_name: "mosquitto"
+     ports:
+       - "1883:1883"
+       - "9001:9001"
+     networks:
+        - fiware
+
+  orion:
+  # Sometimes the newest builds fail. Hence, we fixed a stable version that
+  # probably will be updated once in a while
+    image: fiware/orion:latest #2.5.0
+    hostname: orion
+    container_name: "orion"
+    depends_on:
+      - mongo-db
+    networks:
+        - fiware
+    ports:
+        - "1026:1026"
+    command: -dbhost mongo-db -logLevel DEBUG -noCache -logForHumans #For in production mode please change these settings!
+    
+
+
+  mongo-db:
+    image: mongo:4.0 #Check https://docs.mongodb.com/manual/release-notes/
+    hostname: mongo-db
+    container_name: "mongo-db"
+    # Because within the same network the containers
+    # are connected port exposing is not required and only for external access
+    expose:
+      - "27017"
+    ports:
+        - "27017:27017"
+    networks:
+        - fiware
+    command: --bind_ip_all --smallfiles
+    volumes:
+      - mongo-db:/data
+
+
+  quantumleap:
+    image: smartsdk/quantumleap:fix-256
+    hostname: quantumleap
+    container_name: "quantumleap"
+    depends_on:
+      - mongo-db
+      - orion
+      - crate
+    networks:
+      - fiware
+    ports:
+      - "8668:8668"
+    environment:
+      - CRATE_HOST=crate
+
+  crate:
+    image: crate:latest #4.2.2 # 4.2.2 # 3.3 Please check release notes!
+    hostname: crate
+    container_name: "crate"
+    networks:
+        - fiware
+    ports:
+      - "4200:4200"
+      - "4300:4300"
+      - "6886:6886"
+      - "5432:5432"
+    volumes:
+      - crate:/data
+#    command: crate -Clicense.enterprise=false -Cauth.host_based.enabled=false -Ccluster.name=fiwaredemo -Chttp.cors.enabled=true -Chttp.cors.allow-origin="*"
+    command: ["crate",
+#              "-Clicense.enterprise=false",
+              "-Cauth.host_based.enabled=false",
+              "-Ccluster.name=fiwaredemo",
+              "-Chttp.cors.enabled=true",
+              "-Chttp.cors.allow-origin='*'"]
+#              "-Cnode.name=cratedb01",
+#              "-Cnode.data=true",
+#              "-Cnetwork.host=_site_",
+#              "-Ccluster.initial_master_nodes=cratedb01",
+#              "-Cgateway.expected_nodes=1",
+#              "-Cgateway.recover_after_nodes=2"]
+#    environment:
+#      - CRATE_HEAP_SIZE=2g
+
+
+  grafana:
+    image: grafana/grafana
+    container_name: "grafana"
+    depends_on:
+      - crate
+    environment:
+     - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-worldmap-panel,grafana-simple-json-datasource
+    volumes:
+     - "grafana:/var/lib/grafana"
+    ports:
+      - "4001:3000"
+    networks:
+      - fiware
+
+volumes:
+  grafana:
+    name: "grafana"
+  crate:
+    name: "crate"
+  mongo-db:
+      name: "mongo-db"
+
+
+networks:
+  fiware:
+    name: fiware
